@@ -23,44 +23,55 @@
 lines = File.ReadAllLines("input.txt");
 var points = lines.Select(line =>
 {
-    var parts = line.Split(',').Select(long.Parse).ToArray();
+    var parts = line.Split(',').Select(int.Parse).ToArray();
     return new Point(parts[0], parts[1], parts[2]);
 }).ToArray();
-static long Sqr(long x) => x * x;
-var adjs =
+static long Sqr(long x) => x * x; // long for overflow
+var adjs = points.Select(_ => new List<int>()).ToArray();
+var closest =
     Enumerable.Range(0, points.Length)
     .SelectMany(i => Enumerable.Range(i + 1, points.Length - (i + 1))
         .Select(j => (i, j, SqrDistance:
             Sqr(points[i].X - points[j].X) +
             Sqr(points[i].Y - points[j].Y) +
             Sqr(points[i].Z - points[j].Z))))
-    .OrderBy(t => t.SqrDistance)
-    .Take(points.Length)
-    .SelectMany(p => new[] { (p.i, p.j), (p.j, p.i) })
-    .ToLookup(x => x.Item1, x => x.Item2);
-
-HashSet<int> visited = new();
-int Size(int node)
+    .OrderBy(t => t.SqrDistance);
+int n = 0;
+foreach (var (i, j, _) in closest)
 {
-    int size = 1;
-    foreach (var neighbor in adjs[node])
+    adjs[i].Add(j);
+    adjs[j].Add(i);
+    n++;
+    HashSet<int> visited = new();
+    int Size(int node)
     {
-        if (visited.Add(neighbor))
+        int size = 1;
+        foreach (var neighbor in adjs[node])
         {
-            size += Size(neighbor);
+            if (visited.Add(neighbor))
+            {
+                size += Size(neighbor);
+            }
+        }
+        return size;
+    }
+    List<int> circuitSizes = new();
+    for (int node = 0; node < points.Length; node++)
+    {
+        if (visited.Add(node))
+        {
+            circuitSizes.Add(Size(node));
         }
     }
-    return size;
-}
-List<int> circuitSizes = new();
-foreach (var adj in adjs)
-{
-    int node = adj.Key;
-    if (visited.Add(node))
+    if (n == points.Length)
     {
-        circuitSizes.Add(Size(node));
+        int prod3 = circuitSizes.OrderDescending().Take(3).Aggregate(1, (x, y) => x * y);
+        Console.WriteLine(new { prod3 });
+    }
+    if (circuitSizes.Count == 1)
+    {
+        Console.WriteLine(new { prod = points[i].X * points[j].X});
+        break;
     }
 }
-Console.WriteLine(circuitSizes.OrderDescending().Take(3).Aggregate(1, (x, y) => x * y));
-// 54600 too low
-record struct Point(long X, long Y, long Z);
+record struct Point(int X, int Y, int Z); // int for size
