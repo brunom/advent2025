@@ -10,32 +10,48 @@
     "hhh: ccc fff iii",
     "iii: out",
 };
+string[] lines2 = {
+    "svr: aaa bbb",
+    "aaa: fft",
+    "fft: ccc",
+    "bbb: tty",
+    "tty: ccc",
+    "ccc: ddd eee",
+    "ddd: hub",
+    "hub: fff",
+    "eee: dac",
+    "dac: fff",
+    "fff: ggg hhh",
+    "ggg: out",
+    "hhh: out",
+};
 lines = File.ReadAllLines("input.txt");
+//lines = lines2;
 var graph = lines
     .Select(line => line.Split(new[] { ':', ' ', }, StringSplitOptions.RemoveEmptyEntries))
     .ToDictionary(parts => parts[0], parts => parts[1..]);
-long Paths(string from)
+long Paths(string from, Dictionary<string, long> visited)
 {
-    if (from == "out")
-        return 1;
     long total = 0;
-    foreach (var neighbor in graph[from])
-        total += Paths(neighbor);
+    if (visited.TryGetValue(from, out total))
+        return total;
+    if (graph.TryGetValue(from, out var neighbors))
+    {
+        foreach (var neighbor in neighbors)
+        {
+            total += Paths(neighbor, visited );
+        }
+    }
+    visited.Add(from, total);
     return total;
 }
-Console.WriteLine(Paths("you"));
+Console.WriteLine(Paths("you", new() { ["out"] = 1 }));
 
-//HashSet<string> reachable = new();
-//void Traverse(string node)
-//{
-//    if (!reachable.Add(node))
-//        return;
-//    if (node == "out")
-//        return;
-//    foreach (var neighbor in graph[node])
-//        Traverse(neighbor);
-//}
-//Traverse("you");
-//graph = graph
-//    .Where(kv => reachable.Contains(kv.Key))
-//    .ToDictionary(kv => kv.Key, kv => kv.Value.Where(v => reachable.Contains(v)).ToArray());
+Console.WriteLine(
+    Paths("svr", new() { ["fft"] = 1, ["dac"] = 0, }) *
+    Paths("fft", new() { ["dac"] = 1, }) *
+    Paths("dac", new() { ["out"] = 1, ["fft"] = 0, })
+    +
+    Paths("svr", new() { ["dac"] = 1, ["fft"] = 0, }) *
+    Paths("dac", new() { ["fft"] = 1, }) *
+    Paths("fft", new() { ["out"] = 1, ["dac"] = 0, }));
