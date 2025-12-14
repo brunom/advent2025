@@ -6,16 +6,59 @@ string[] lines = {
     "[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}",
 };
 lines = File.ReadAllLines("input.txt");
+int total1_linq = (
+    from line in lines
+    let parts = line.Split(' ')
+    let light_bits =
+        parts[0]
+        .Trim('[', ']')
+        .Reverse()
+        .Aggregate(0u, (acc, c) => acc << 1 | (c == '#' ? 1u : 0u))
+    //.Select((c, i) => (c == '#' ? 1u : 0u) << i)
+    //.Aggregate(0u, (acc, val) => acc | val)
+    let button_effect_bits =
+        parts[1..^1]
+        .Select(part =>
+            part
+            .Trim('(', ')')
+            .Split(',')
+            .Aggregate(0u, (acc, s) => acc | (1u << int.Parse(s))))
+        .ToArray()
+    select (
+        from button_pressed_bits in Enumerable.Range(0, 1 << button_effect_bits.Length)
+        let curr_light_bits =
+            button_effect_bits
+            .Select((effect, j) => ((button_pressed_bits >> j) & 1) == 1 ? effect : 0u)
+            .Aggregate(0u, (acc, val) => acc ^ val)
+        where curr_light_bits == light_bits
+        select BitOperations.PopCount((uint)button_pressed_bits))
+        .Min())
+    .Sum();
+var stats =
+    from line in lines
+    let parts = line.Split(' ')
+    let light_joltage_goal =
+        parts[^1]
+        .Trim('{', '}')
+        .Split(',')
+        .Select(int.Parse)
+        .ToArray()
+    //let x = light_joltage_goal.Length
+    from x in light_joltage_goal
+    select x;
+//Console.WriteLine(stats.Max());
+
 int total1 = 0;
 int total2 = 0;
+long work2 = 0;
 foreach (var line in lines)
 {
     var parts = line.Split(' ');
-    var light_goal =
+    uint light_bits =
         parts[0].Trim('[', ']')
         .Select((c, i) => (c == '#' ? 1u : 0u) << i)
         .Aggregate(0u, (acc, val) => acc | val);
-    var button_effect =
+    uint[] button_effect_bits =
         parts[1..^1]
         .Select(part =>
             part
@@ -23,9 +66,8 @@ foreach (var line in lines)
             .Split(',')
             .Select(int.Parse)
             .Aggregate(0u, (acc, val) => acc | (1u << val)))
-        .OrderByDescending(BitOperations.PopCount)
         .ToArray();
-    var light_joltage_goal =
+    int[] light_joltage_goal =
         parts[^1]
         .Trim('{', '}')
         .Split(',')
@@ -33,70 +75,96 @@ foreach (var line in lines)
         .ToArray();
 
     int minButtons1 = int.MaxValue;
-    for (uint i = 0; i < (1 << button_effect.Length); i++)
+    for (uint button_pressed_bits = 0; button_pressed_bits < (1 << button_effect_bits.Length); button_pressed_bits++)
     {
-        uint tempIndicator = 0;
-        for (int j = 0; j < button_effect.Length; j++)
+        uint curr_light_bits = 0;
+        for (int button = 0; button < button_effect_bits.Length; button++)
         {
-            if (((i >> j) & 1) == 1)
+            if (((button_pressed_bits >> button) & 1) == 1)
             {
-                tempIndicator ^= button_effect[j];
+                curr_light_bits ^= button_effect_bits[button];
             }
         }
-        int buttons = BitOperations.PopCount(i);
-        if (tempIndicator == light_goal && buttons < minButtons1)
+        int buttons = BitOperations.PopCount(button_pressed_bits);
+        if (curr_light_bits == light_bits && buttons < minButtons1)
         {
             minButtons1 = buttons;
         }
     }
     total1 += minButtons1;
 
-    int minButtons2 = int.MaxValue;
-    int[] curr_presses = new int[button_effect.Length];
-    int[] curr_joltage = new int[light_joltage_goal.Length];
-    bool add_joltage(int button, int presses) // returns overflow
+    Queue<(int numButtons, int[] joltage)> queue = new();
+    HashSet<int[]> seen = new(IntArrayEqualityComparer.Instance);
+    var joltage = light_joltage_goal;
+    int numButtons = 0;
+    while (true)
     {
-        bool overflow = false;
-        for (int light = 0; light < curr_joltage.Length; light++)
+        foreach (uint b in button_effect_bits)
         {
-            if (((button_effect[button] >> light) & 1) == 1)
+            work2++;
+            int[] new_joltage = new int[joltage.Length];
+            bool allzero = true;
+            bool allnonnegative = true;
+            for (int i = 0; i < joltage.Length; i++)
             {
-                curr_joltage[light] += presses;
-                if (curr_joltage[light] > light_joltage_goal[light])
+                int j = joltage[i];                
+                if (((b >> i) & 1) == 1)
+                    j--;
+                if (j != 0)
+                    allzero = false;
+                if (j < 0)
+                    allnonnegative = false;
+                new_joltage[i] = j;
+            }
+            if (allzero)
+            {
+                total2 += numButtons + 1;
+                goto done2;
+            }
+            if (allnonnegative)
+            {
+                if (seen.Add(new_joltage))
                 {
-                    overflow = true;
+                    queue.Enqueue((numButtons: numButtons + 1, joltage: new_joltage));
                 }
             }
         }
-        return overflow;
+        if (queue.Count == 0)
+            break;
+        (numButtons, joltage) = queue.Dequeue();
     }
-    bool inc_presses() // returns carry
+done2: { }
+
+
+}
+Console.WriteLine(new { total1_linq, total1, total2, work2, });
+
+class IntArrayEqualityComparer : IEqualityComparer<int[]>
+{
+    public static IntArrayEqualityComparer Instance { get; } = new IntArrayEqualityComparer();
+    public bool Equals(int[]? x, int[]? y)
     {
-        for (int button = 0; button < button_effect.Length; button++)
+        if (x == null || y == null)
+            return x == y;
+        if (x.Length != y.Length)
+            return false;
+        for (int i = 0; i < x.Length; i++)
         {
-            curr_presses[button]++;
-            if (!add_joltage(button, 1))
+            if (x[i] != y[i])
                 return false;
-            add_joltage(button, -curr_presses[button]);
-            curr_presses[button] = 0;
         }
         return true;
     }
-    while (true)
+    public int GetHashCode(int[] obj)
     {
-        if (inc_presses())
-            break;
-        if (Enumerable.SequenceEqual(curr_joltage, light_joltage_goal))
+        var hash = new HashCode();
+        if (obj != null)
         {
-            int buttons = curr_presses.Sum();
-            if (buttons < minButtons2)
+            foreach (var item in obj)
             {
-                minButtons2 = buttons;
-                break;
+                hash.Add(item);
             }
         }
+        return hash.ToHashCode();
     }
-    total2 += minButtons2;
-
 }
-Console.WriteLine(new { total1, total2 });
